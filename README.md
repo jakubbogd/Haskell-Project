@@ -1,3 +1,1 @@
-# Haskell-Project
-
-Projekt na zaliczenie
+# game
