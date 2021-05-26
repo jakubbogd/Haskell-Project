@@ -39,8 +39,11 @@ move (GameState car wall a dir aa aaa lifes aaaa)= if wasWallHit (GameState car 
                             else (GameState newcar wall a dir aa aaa lifes aaaa)
     where   newcar = move' (directionVectorMap ! dir) car
 
+gennewWall::Int->Int->Int->Int->Wall
+gennewWall x y rn w=[((min (max (x+rn+i) 0) (min (x+rn+i) cols)),(y-1))|i<-[0..w]]
+
 moveWall:: GameState-> (Wall,StdGen,Bool)
-moveWall (GameState _ wall _ _ _ ran _ _)= ([(min (max (wallX+rn) 0) (min (wallX+rn) cols),wallY'-1),(min (max (wallX+1+rn) 0) (min (wallX+1+rn) cols),wallY'-1),(min (max (wallX+2+rn) 0) (min (wallX+2+rn) cols),wallY'-1),(min (max (wallX+3+rn) 0) (min (wallX+3+rn) cols),wallY'-1),(min (max (wallX+4+rn) 0) (min (wallX+4+rn) cols),wallY'-1) ],ran2,newPoint)
+moveWall (GameState _ wall _ _ _ ran _ _)= (gennewWall wallX wallY' rn width,ran2,newPoint)
         where
                 wallY'
                         |wallY<2 = rows-2
@@ -53,6 +56,9 @@ moveWall (GameState _ wall _ _ _ ran _ _)= ([(min (max (wallX+rn) 0) (min (wallX
                         |rm==1=False 
                         |otherwise =True
                 (rn,ran2) = randomR (-1*rm, 1*rm) ran
+                (width,_)
+                        |wallY<2=randomR (1,cols `div` 2) ran
+                        |otherwise=(length wall-1, ran)
 
 checkGameOver :: GameState -> Bool
 checkGameOver (GameState car wall point dir over ran lifes record) =   headX == 2 || headX == (cols-2) || 
