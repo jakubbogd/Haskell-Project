@@ -1,80 +1,80 @@
-module AppState where
-    import System.Random
-    import Control.Monad.Trans.Class
-    import Control.Monad.Trans.State.Strict
+module CandW where
 
-    data Direction = UP | DOWN |LEFT | RIGHT deriving (Eq, Ord)
-    type Wall = [(Int, Int)]
-    type Car = [(Int, Int)]
+import Data.Map as Map
+import System.Random
+import Control.Monad.State.Strict
 
-    data GameState = GameState   { getCar :: Car
+data Direction = UP | DOWN |LEFT | RIGHT deriving (Eq, Ord)
+type Wall = [(Int, Int)]
+type Car = [(Int, Int)]
+
+type St= StateT Direction IO
+
+cols::Int
+rows::Int
+cols = 50
+rows = 33
+
+directionVectorMap :: Map Direction (Int, Int)
+directionVectorMap = Map.fromList $ zip [UP,DOWN, LEFT, RIGHT] 
+                                        [(0, -1), (0, 1),(-1, 0), (1, 0)]
+
+wasWallHit::GameState->Bool
+wasWallHit (GameState car wall _ _ _ _ _ _)=wasWallhit
+        where
+                wasWallhit = (headX<=wallX2 && headX>=wallX1 &&wallY==headY) ||
+                        (headX<=wallX2 && headX>=wallX1 &&wallY==(headY-1))||
+                        wallY==(headY-2) && ((wallX1<=headX-1 && headX-1<=wallX2) || (wallX1<=headX && headX<=wallX2) || (wallX1<=headX+1 && headX+1<=wallX2))
+                (headX, headY) = head car
+                (wallX1,wallY) = head wall
+                (wallX2,_) = last wall
+
+move':: (Int,Int)->Car->Car
+move' (_,_) []=[]
+move' (a,b) ((c,d):xs) =(a+c,b+d): move' (a,b) xs
+
+move :: GameState->GameState
+move (GameState car wall a dir aa aaa lifes aaaa)= if wasWallHit (GameState car wall a dir aa aaa lifes aaaa)
+                            then (GameState car wall a dir aa aaa (lifes-1) aaaa)
+                            else (GameState newcar wall a dir aa aaa lifes aaaa)
+    where   newcar = move' (directionVectorMap ! dir) car
+
+moveWall:: GameState-> (Wall,StdGen,Bool)
+moveWall (GameState _ wall _ _ _ ran _ _)= ([(min (max (wallX+rn) 0) (min (wallX+rn) cols),wallY'-1),(min (max (wallX+1+rn) 0) (min (wallX+1+rn) cols),wallY'-1),(min (max (wallX+2+rn) 0) (min (wallX+2+rn) cols),wallY'-1),(min (max (wallX+3+rn) 0) (min (wallX+3+rn) cols),wallY'-1),(min (max (wallX+4+rn) 0) (min (wallX+4+rn) cols),wallY'-1) ],ran2,newPoint)
+        where
+                wallY'
+                        |wallY<2 = rows-2
+                        |otherwise =wallY
+                (wallX,wallY)=head wall
+                rm
+                        |wallY<2 = 10
+                        |otherwise =1
+                newPoint
+                        |rm==1=False 
+                        |otherwise =True
+                (rn,ran2) = randomR (-1*rm, 1*rm) ran
+
+checkGameOver :: GameState -> Bool
+checkGameOver (GameState car wall point dir over ran lifes record) =   headX == 2 || headX == (cols-2) || 
+                      headY == (rows-1)||headY==3||
+                      (wasWallHit (GameState car wall point dir over ran lifes record) && lifes<1)
+    where
+            (headX, headY) = head car
+
+data GameState = GameState      { getCar :: Car
                                 , getWall :: Wall
                                 , getPoints :: Int
                                 , getDirection :: Direction
-                                , getRandomStdGen :: StdGen }
+                                , isGameOver :: Bool
+                                , getRandomStdGen :: StdGen
+                                , getLifes:: Int
+                                , getRecord::Int }
 
-    type GameIO a = StateT GameState IO a
+changeDirection :: GameState -> Direction -> GameState
+changeDirection (GameState c w p _ g r l re) newDir = GameState c w p newDir g r l re
 
-    parseCommand :: Char -> Maybe Direction
-    parseCommand 'a' = Just LEFT
-    parseCommand 's' = Just DOWN
-    parseCommand 'w' = Just UP
-    parseCommand 'd' = Just RIGHT
-    parseCommand _ = Nothing
-
-    gameStart::GameIO ()
-    gameStart =
-        return ()
-
-
-    readCommand::GameIO (Maybe Direction)
-    readCommand= do
-        x<- lift getChar
-        let r = parseCommand x
-        return r
-
-    makeMove::Maybe Direction->Car-> Car
-    makeMove Nothing car=car
-    makeMove _ []=[]
-    makeMove (Just LEFT) ((a,b):xs)=(a-1,b):makeMove (Just LEFT) xs
-    makeMove (Just RIGHT) ((a,b):xs)=(a+1,b):makeMove (Just RIGHT) xs
-    makeMove (Just UP) ((a,b):xs)=(a,b+1):makeMove (Just UP) xs
-    makeMove (Just DOWN) ((a,b):xs)=(a,b-1):makeMove (Just DOWN) xs
-
-
-    runCommand :: Maybe Direction -> GameIO ()
-    runCommand (Just dir) = modify' (\(GameState a b c d e) -> GameState (makeMove (Just dir) a) b c d e)
-    runCommand Nothing = modify' id
-
-    accident ::Car->Wall->Bool
-    accident ((a,b):xs) wall= accidentcell (a,b) wall || accident xs wall
-    accident [] _ =False
-
-
-    accidentcell::(Int, Int)->[(Int, Int)]->Bool
-    accidentcell (a,b) ((c,d):ys)=(a==c && b==d) || accidentcell (a,b) ys
-    accidentcell (_,_) [] =False
-   
-
-    checkEnd::GameIO Bool
-    checkEnd = do
-        GameState a b _ _ _ <- get
-        let res=accident a b
-        if res then return True else return False
-
-    mainLoop::GameIO ()
-    mainLoop = readCommand >>= runCommand >> checkEnd
-        >>=( \p ->
-        if p then (lift $ putStr "Game Over\n")>>return () else  mainLoop )
-    
-
-    toMain :: IO ()
-    toMain =  do
-        _ <- execStateT mainLoop firstState
-        return ()
-
-    firstState::GameState
-    firstState=GameState   { getCar = [  (carX, carY), 
+initialGameState :: Bool->Int -> GameState
+initialGameState gameOver record= GameState   { getCar = [  (carX, carY), 
                                                         (carX, carY - 1),
                                                         (carX, carY - 2), 
                                                         (carX - 1, carY - 2), 
@@ -82,11 +82,13 @@ module AppState where
                                         , getWall = [(carX-2,rows-1),(carX-1,rows-1),(carX,rows-1),(carX+1,rows-1), (carX+2,rows-1)]
                                         , getPoints =0
                                         , getDirection = LEFT
-                                        , getRandomStdGen = mkStdGen 100 }
-                where   carX = cols `div` 2
-                        carY = 4
-    
-    cols::Int
-    rows::Int
-    cols = 50
-    rows = 33
+                                        , isGameOver = gameOver
+                                        , getRandomStdGen = mkStdGen 100 
+                                        , getLifes=9
+                                        , getRecord=record}
+        where   carX = cols `div` 2
+                carY = 4
+
+
+readInts :: String -> Int
+readInts x = read x
