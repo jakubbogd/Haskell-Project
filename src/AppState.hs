@@ -2,13 +2,12 @@ module CandW where
 
 import Data.Map as Map
 import System.Random
-import Control.Monad.State.Strict
 
 data Direction = UP | DOWN |LEFT | RIGHT deriving (Eq, Ord)
 type Wall = [(Int, Int)]
 type Car = [(Int, Int)]
+type Walls=[Wall]
 
-type St= StateT Direction IO
 
 cols::Int
 rows::Int
@@ -19,8 +18,12 @@ directionVectorMap :: Map Direction (Int, Int)
 directionVectorMap = Map.fromList $ zip [UP,DOWN, LEFT, RIGHT] 
                                         [(0, -1), (0, 1),(-1, 0), (1, 0)]
 
-wasWallHit::GameState->Bool
-wasWallHit (GameState car wall _ _ _ _ _ _)=wasWallhit
+wasWallsHit::GameState->Bool
+wasWallsHit (GameState car (w:ws) a b c d e f)= wasWallHit car w || wasWallsHit (GameState car ws a b c d e f)
+wasWallsHit (GameState _ [] _ _ _ _ _ _)=False
+
+wasWallHit::Car->Wall->Bool
+wasWallHit car wall=wasWallhit
         where
                 wasWallhit = (headX<=wallX2 && headX>=wallX1 &&wallY==headY) ||
                         (headX<=wallX2 && headX>=wallX1 &&wallY==(headY-1))||
@@ -34,7 +37,7 @@ move' (_,_) []=[]
 move' (a,b) ((c,d):xs) =(a+c,b+d): move' (a,b) xs
 
 move :: GameState->GameState
-move (GameState car wall a dir aa aaa lifes aaaa)= if wasWallHit (GameState car wall a dir aa aaa lifes aaaa)
+move (GameState car wall a dir aa aaa lifes aaaa)= if wasWallsHit (GameState car wall a dir aa aaa lifes aaaa)
                             then (GameState car wall a dir aa aaa (lifes-1) aaaa)
                             else (GameState newcar wall a dir aa aaa lifes aaaa)
     where   newcar = move' (directionVectorMap ! dir) car
@@ -42,33 +45,59 @@ move (GameState car wall a dir aa aaa lifes aaaa)= if wasWallHit (GameState car 
 gennewWall::Int->Int->Int->Int->Wall
 gennewWall x y rn w=[((min (max (x+rn+i) 0) (min (x+rn+i) cols)),(y-1))|i<-[0..w]]
 
-moveWall:: GameState-> (Wall,StdGen,Bool)
-moveWall (GameState _ wall _ _ _ ran _ _)= (gennewWall wallX wallY' rn width,ran2,newPoint)
+gennewWalls::[Int]->Int->[Int]->[Int]->Walls
+gennewWalls (x:xs) y (r:rs) (w:ws)=gennewWall x y r w:gennewWalls xs y rs ws
+gennewWalls [] _ _ _ =[]
+gennewWalls _ _ [] _ =[]
+gennewWalls _ _ _ [] =[]
+
+getHeads::Walls->[Int]
+getHeads (w:ws)=(getHead w):(getHeads ws)
+getHeads []=[]
+
+getHead::Wall->Int
+getHead ((a,_):_) =a
+getHead [] =0
+
+moveWalls:: GameState-> (Walls,StdGen,Bool)
+moveWalls (GameState _ walls _ _ _ ran _ _)= (gennewWalls wallXs wallY' rns widths,ran',newPoint)
         where
-                wallY'
-                        |wallY<2 = rows-2
-                        |otherwise =wallY
-                (wallX,wallY)=head wall
-                rm
-                        |wallY<2 = 10
-                        |otherwise =1
+                (_,wallY)=head (head walls)
+                wallXs=getHeads walls
+                (wallY',rm)
+                        |wallY<2 = (rows-2,10)
+                        |otherwise =(wallY,1)
                 newPoint
                         |rm==1=False 
                         |otherwise =True
-                (rn,ran2) = randomR (-1*rm, 1*rm) ran
-                (width,_)
-                        |wallY<2=randomR (1,cols `div` 2) ran
-                        |otherwise=(length wall-1, ran)
+                (_,ran')=randomR (-1*rm, 1*rm) ran
+                rns=getRandoms ran walls rm
+                widths=getWidths ran walls wallY
+
+getRandoms::StdGen->Walls->Int->[Int]
+getRandoms ran (_:ws) rm=rn:(getRandoms ran2 ws rm)
+        where (rn,ran2)=randomR (-1*rm, 1*rm) ran
+getRandoms _ [] _=[]
+
+getWidths::StdGen->Walls->Int->[Int]
+getWidths ran (w:ws) y=width:(getWidths ran2 ws y)
+        where (width,ran2)
+                        |y<2=randomR (1,cols `div` 2) ran
+                        |otherwise=(length w-1, ran)
+getWidths _ [] _=[]
+
+getn::Int->[a]->a
+getn n xs = last (Prelude.take n xs)
 
 checkGameOver :: GameState -> Bool
 checkGameOver (GameState car wall point dir over ran lifes record) =   headX == 2 || headX == (cols-2) || 
                       headY == (rows-1)||headY==3||
-                      (wasWallHit (GameState car wall point dir over ran lifes record) && lifes<1)
+                      (wasWallsHit (GameState car wall point dir over ran lifes record) && lifes<1)
     where
             (headX, headY) = head car
 
 data GameState = GameState      { getCar :: Car
-                                , getWall :: Wall
+                                , getWalls :: Walls
                                 , getPoints :: Int
                                 , getDirection :: Direction
                                 , isGameOver :: Bool
@@ -85,7 +114,7 @@ initialGameState gameOver record= GameState   { getCar = [  (carX, carY),
                                                         (carX, carY - 2), 
                                                         (carX - 1, carY - 2), 
                                                         (carX + 1, carY - 2)]
-                                        , getWall = [(carX-2,rows-1),(carX-1,rows-1),(carX,rows-1),(carX+1,rows-1), (carX+2,rows-1)]
+                                        , getWalls = [[(carX-2,rows-1),(carX-1,rows-1),(carX,rows-1),(carX+1,rows-1), (carX+2,rows-1)],[(cols,rows-1),(cols-1,rows-1),(cols-2,rows-1)],[(1,rows-1),(2,rows-1),(3,rows-1)]]
                                         , getPoints =0
                                         , getDirection = LEFT
                                         , isGameOver = gameOver
@@ -94,7 +123,3 @@ initialGameState gameOver record= GameState   { getCar = [  (carX, carY),
                                         , getRecord=record}
         where   carX = cols `div` 2
                 carY = 4
-
-
-readInts :: String -> Int
-readInts x = read x
