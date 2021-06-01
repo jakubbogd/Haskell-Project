@@ -14,13 +14,13 @@ render :: GameState -> IO Picture
 render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                 ] ++
                                   fmap (convertToPicture white) car ++ 
-                                  fmap (convertToPicture blue) wall ++
+                                  createwalls walls ++
                                   pointsPicture++
                                   lifesPicture++
                                   recordPicture++
                                   gameOverPicture)
     where   car = getCar gameState 
-            wall = getWall gameState
+            walls = getWalls gameState
             point = getPoints gameState
             life = getLifes gameState
             record=getRecord gameState
@@ -30,6 +30,9 @@ render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                                     scale 1 (-1) $ 
                                                     translate (tx * 20 - 500) (ty * 20 - 300) $ 
                                                     rectangleSolid w h
+            createwalls::Walls->[Picture]
+            createwalls (w:ws)=(fmap (convertToPicture blue) w)++(createwalls ws)
+            createwalls []=[]
             toFloat (x, y) = (fromIntegral x, fromIntegral y)
             gameOverPicture =   if isGameOver gameState 
                                 then [  color red $ 
@@ -59,22 +62,21 @@ update _ gameState =  do
                         writeFile "record.txt" (show record)
                         if gameOver
                             then return gameState
-                            else return (GameState newCar newWall newPoints direction newGameOver newStdGen newlifes newRecord)
+                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newlifes newRecord)
     where   points =getPoints gameState
             direction = getDirection gameState
             gameOver = isGameOver gameState
             record = getRecord gameState
             GameState newCar _ _ _ _ _ newlifes _= move gameState
-            (newWall,newStdGen,wasWallavoided) = moveWall gameState
+            (newWalls,newStdGen,wasWallsavoided) = moveWalls gameState
             newGameOver = checkGameOver gameState
             newPoints
-                |wasWallavoided=points+1
+                |wasWallsavoided=points+1
                 |otherwise=points
             newRecord
                 |record<newPoints=newPoints
                 |otherwise=record
-            save=newRecord>=record  
-
+                
 handleKeys::Event->GameState->IO GameState
 handleKeys (EventKey (SpecialKey KeyLeft ) Down _ _) gameState = return (changeDirection gameState LEFT)
 handleKeys (EventKey (SpecialKey KeyRight) Down _ _) gameState = return (changeDirection gameState RIGHT)  
