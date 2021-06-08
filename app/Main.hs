@@ -58,18 +58,15 @@ render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                 text (show life)]
                                                         
 update :: Float -> GameState -> IO GameState
-update _ gameState =  do
+update _ (GameState car walls points direction gameOver stdgen stdgen2 lifes record) =  do
                         writeFile "record.txt" (show record)
                         if gameOver
-                            then return gameState
-                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newlifes newRecord)
-    where   points =getPoints gameState
-            direction = getDirection gameState
-            gameOver = isGameOver gameState
-            record = getRecord gameState
-            GameState newCar _ _ _ _ _ newlifes _= move gameState
-            (newWalls,newStdGen,wasWallsavoided) = moveWalls gameState
-            newGameOver = checkGameOver gameState
+                            then return (GameState car (genWalls 3 stdgen2) points direction gameOver stdgen stdgen2 lifes record)
+                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newStdGen2 newlifes newRecord)
+    where   
+            GameState newCar _ _ _ _ _ _ newlifes _= move (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
+            (newWalls,newStdGen,newStdGen2,wasWallsavoided) = moveWalls (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
+            newGameOver = checkGameOver (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
             newPoints
                 |wasWallsavoided=points+1
                 |otherwise=points
