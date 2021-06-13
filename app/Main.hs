@@ -13,17 +13,23 @@ background = black
 render :: GameState -> IO Picture
 render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                 ] ++
-                                  fmap (convertToPicture white) car ++ 
+                                  fmap (convertToPicture colorr) car ++
                                   createwalls walls ++
                                   pointsPicture++
                                   lifesPicture++
                                   recordPicture++
-                                  gameOverPicture)
+                                  gameOverPicture++
+                                  superPicture)
     where   car = getCar gameState 
             walls = getWalls gameState
             point = getPoints gameState
             life = getLifes gameState
             record=getRecord gameState
+            super=isSuper gameState
+            supercount=getSuperCount gameState
+            colorr
+                |super=green 
+                |otherwise=white
             convertToPicture :: Color -> (Int, Int) -> Picture
             convertToPicture color' (x, y) = fillRectangle color' (toFloat (x, y)) (20, 20)
             fillRectangle color' (tx, ty) (w, h) =  color color' $ 
@@ -31,7 +37,7 @@ render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                                     translate (tx * 20 - 500) (ty * 20 - 300) $ 
                                                     rectangleSolid w h
             createwalls::Walls->[Picture]
-            createwalls (w:ws)=(fmap (convertToPicture blue) w)++(createwalls ws)
+            createwalls (w:ws)=fmap (convertToPicture blue) w++createwalls ws
             createwalls []=[]
             toFloat (x, y) = (fromIntegral x, fromIntegral y)
             gameOverPicture =   if isGameOver gameState 
@@ -56,17 +62,24 @@ render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
                                 translate (-450) 250 $ 
                                 scale 0.25 0.25 $ 
                                 text (show life)]
+            superPicture =      [color green $
+                                translate (-450) 200 $ 
+                                scale 0.25 0.25 $ 
+                                text (show supercount)]
                                                         
 update :: Float -> GameState -> IO GameState
-update _ (GameState car walls points direction gameOver stdgen stdgen2 lifes record) =  do
+update _ (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount) =  do
                         writeFile "record.txt" (show record)
                         if gameOver
-                            then return (GameState car (genWalls 3 stdgen2) points direction gameOver stdgen stdgen2 lifes record)
-                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newStdGen2 newlifes newRecord)
+                            then return (GameState car (genWalls 3 stdgen2) points direction gameOver stdgen stdgen2 lifes record super scount)
+                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newStdGen2 newlifes newRecord super newsupercount)
     where   
-            GameState newCar _ _ _ _ _ _ newlifes _= move (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
-            (newWalls,newStdGen,newStdGen2,wasWallsavoided) = moveWalls (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
-            newGameOver = checkGameOver (GameState car walls points direction gameOver stdgen stdgen2 lifes record)
+            GameState newCar' newWalls' _ _ _ _ _ newlifes _ _ newsupercount= move (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount)
+            (newWalls,newStdGen,newStdGen2,wasWallsavoided) = moveWalls (GameState car newWalls' points direction gameOver stdgen stdgen2 lifes record super scount)
+            newGameOver = checkGameOver (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount)
+            newCar
+                |wasWallsavoided=newCell newCar' newStdGen
+                |otherwise =newCar'
             newPoints
                 |wasWallsavoided=points+1
                 |otherwise=points
@@ -79,11 +92,13 @@ handleKeys (EventKey (SpecialKey KeyLeft ) Down _ _) gameState = return (changeD
 handleKeys (EventKey (SpecialKey KeyRight) Down _ _) gameState = return (changeDirection gameState RIGHT)  
 handleKeys (EventKey (SpecialKey KeyUp   ) Down _ _) gameState = return (changeDirection gameState UP)
 handleKeys (EventKey (SpecialKey KeyDown ) Down _ _) gameState = return (changeDirection gameState DOWN) 
-handleKeys (EventKey (SpecialKey KeyEnter) Down _ _) gameState =    if isGameOver gameState then return (initialGameState False record) else return gameState
+handleKeys (EventKey (Char 'z') Down _ _) (GameState a b c d e f g h i False scount) =if scount>0 then return (makeSuper (GameState a b c d e f g h i False scount) True) else return (makeSuper (GameState a b c d e f g h i False scount) False)
+handleKeys (EventKey (Char 'z') Up _ _) gameState = return (makeSuper gameState False)
+handleKeys (EventKey (SpecialKey KeyEnter) Down _ _) gameState = if isGameOver gameState then return (initialGameState False record) else return gameState
     where record=getRecord gameState
 handleKeys _ gameState = return gameState
 
 main :: IO ()
 main =do
-    a<-fmap (read::String->Int) (readFile "record.txt") 
-    playIO window background 10 (initialGameState False a) render handleKeys update
+    record<-fmap (read::String->Int) (readFile "record.txt") 
+    playIO window background 10 (initialGameState False record) render handleKeys update
