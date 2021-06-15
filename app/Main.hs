@@ -1,104 +1,165 @@
-module Main where
+module CandW where
 
-import CandW
-import Graphics.Gloss
-import Graphics.Gloss.Interface.IO.Game
+import Data.Map as Map
+import System.Random
 
-window :: Display
-window = InWindow "Haskell Car Game" (1000, 600) (100, 100)
+data Direction = UP | DOWN |LEFT | RIGHT deriving (Eq, Ord,Show)
+type Wall = [(Int, Int)]
+type Walls=[Wall]
+type Car = [(Int, Int)]
 
-background :: Color
-background = black
+cols::Int
+rows::Int
+cols = 50
+rows = 50
 
-render :: GameState -> IO Picture
-render gameState =return (pictures $   [ fillRectangle black (16, 0) (0,0)
-                                ] ++
-                                  fmap (convertToPicture colorr) car ++
-                                  createwalls walls ++
-                                  pointsPicture++
-                                  lifesPicture++
-                                  recordPicture++
-                                  gameOverPicture++
-                                  superPicture)
-    where   car = getCar gameState 
-            walls = getWalls gameState
-            point = getPoints gameState
-            life = getLifes gameState
-            record=getRecord gameState
-            super=isSuper gameState
-            supercount=getSuperCount gameState
-            colorr
-                |super=green 
-                |otherwise=white
-            convertToPicture :: Color -> (Int, Int) -> Picture
-            convertToPicture color' (x, y) = fillRectangle color' (toFloat (x, y)) (20, 20)
-            fillRectangle color' (tx, ty) (w, h) =  color color' $ 
-                                                    scale 1 (-1) $ 
-                                                    translate (tx * 20 - 500) (ty * 20 - 300) $ 
-                                                    rectangleSolid w h
-            createwalls::Walls->[Picture]
-            createwalls (w:ws)=fmap (convertToPicture blue) w++createwalls ws
-            createwalls []=[]
-            toFloat (x, y) = (fromIntegral x, fromIntegral y)
-            gameOverPicture =   if isGameOver gameState 
-                                then [  color red $ 
-                                        translate (-200) 0 $ 
-                                        scale 0.5 0.5 $ 
-                                        text "GAME OVER"
-                                     ,  color blue $ 
-                                        translate (-175) (-50) $ 
-                                        scale 0.2 0.2 $ 
-                                        text "Press ENTER to try again." ] 
-                                else []
-            pointsPicture=     [color yellow $ 
-                                translate 450 250 $ 
-                                scale 0.25 0.25 $ 
-                                text (show point)]
-            recordPicture=     [color yellow $ 
-                                translate 450 200 $ 
-                                scale 0.25 0.25 $ 
-                                text (show record)]
-            lifesPicture =     [color red $ 
-                                translate (-450) 250 $ 
-                                scale 0.25 0.25 $ 
-                                text (show life)]
-            superPicture =      [color green $
-                                translate (-450) 200 $ 
-                                scale 0.25 0.25 $ 
-                                text (show supercount)]
-                                                        
-update :: Float -> GameState -> IO GameState
-update _ (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount) =  do
-                        writeFile "record.txt" (show record)
-                        if gameOver
-                            then return (GameState car (genWalls 3 stdgen2) points direction gameOver stdgen stdgen2 lifes record super scount)
-                            else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newStdGen2 newlifes newRecord super newsupercount)
-    where   
-            GameState newCar' newWalls' _ _ _ _ _ newlifes _ _ newsupercount= move (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount)
-            (newWalls,newStdGen,newStdGen2,wasWallsavoided) = moveWalls (GameState car newWalls' points direction gameOver stdgen stdgen2 lifes record super scount)
-            newGameOver = checkGameOver (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount)
-            newCar
-                |wasWallsavoided=newCell newCar' newStdGen
-                |otherwise =newCar'
-            newPoints
-                |wasWallsavoided=points+1
-                |otherwise=points
-            newRecord
-                |record<newPoints=newPoints
-                |otherwise=record
-                
-handleKeys::Event->GameState->IO GameState
-handleKeys (EventKey (SpecialKey KeyLeft ) Down _ _) gameState = return (changeDirection gameState LEFT)
-handleKeys (EventKey (SpecialKey KeyRight) Down _ _) gameState = return (changeDirection gameState RIGHT)  
-handleKeys (EventKey (SpecialKey KeyUp   ) Down _ _) gameState = return (changeDirection gameState UP)
-handleKeys (EventKey (SpecialKey KeyDown ) Down _ _) gameState = return (changeDirection gameState DOWN) 
-handleKeys (EventKey (Char 'z') Down _ _) (GameState a b c d e f g h i False scount) =if scount>0 then return (makeSuper (GameState a b c d e f g h i False scount) True) else return (makeSuper (GameState a b c d e f g h i False scount) False)
-handleKeys (EventKey (Char 'z') Up _ _) gameState = return (makeSuper gameState False)
-handleKeys (EventKey (SpecialKey KeyEnter) Down _ _) gameState = if isGameOver gameState then return (initialGameState False record) else return gameState
-    where record=getRecord gameState
-handleKeys _ gameState = return gameState
+data GameState = GameState  { getCar :: Car
+                        , getWalls :: Walls
+                        , getPoints :: Int
+                        , getDirection :: Direction
+                        , isGameOver :: Bool
+                        , getRandomStdGen :: StdGen
+                        , getRandomStdGen2 :: StdGen
+                        , getLifes:: Int
+                        , getRecord::Int
+                        , isSuper:: Bool
+                        , getSuperCount::Int} deriving Show
 
-main :: IO ()
-main =do
-    record<-fmap (read::String->Int) (readFile "record.txt") 
-    playIO window background 10 (initialGameState False record) render handleKeys update
+directionVectorMap :: Map Direction (Int, Int)
+directionVectorMap = Map.fromList $ zip [UP,DOWN, LEFT, RIGHT] [(0, -1), (0, 1),(-1, 0), (1, 0)]
+
+wasWallsHit::GameState->Bool
+wasWallsHit (GameState car walls _ _ _ _ _ _ _ _ _)= Prelude.foldr (\w x->x|| wasWallHit car w) False walls
+
+wasWallHit::Car->Wall->Bool
+wasWallHit car w=Prelude.foldr (\c x->x||c `elem` w) False car
+
+deletewalls::Car->Walls->Walls
+deletewalls car =Prelude.map (Prelude.filter (`notElem` car))
+
+move :: GameState->GameState
+move (GameState car wall a dir aa aaa aaaaa lifes aaaa super supercount)= if wasWallsHit (GameState car wall a dir aa aaa aaaaa lifes aaaa super supercount)
+                            then if super
+                                    then if (supercount-1)<1
+                                        then GameState newcar newwall a dir aa aaa aaaaa (lifes-1) aaaa False (max (supercount-1) 0)
+                                        else GameState newcar newwall a dir aa aaa aaaaa lifes aaaa True (max (supercount-1) 0)
+                                    else GameState newcar newwall a dir aa aaa aaaaa (lifes-1) aaaa super supercount
+                            else GameState newcar wall a dir aa aaa aaaaa lifes aaaa super supercount
+    where   newcar = move' (directionVectorMap ! dir) car
+            newwall=deletewalls car wall
+
+genWall::Int->Int->Int->Int->Wall
+genWall x y rn w=[((min (max (x+rn+i) 0) (min (x+rn+i) cols)+max (max (x+rn+i) 0) (min (x+rn+i) cols)) `div` 2,y)|i<-[0..w]]
+
+genWalls::[Int]->[Int]->[Int]->[Int]->Walls
+genWalls (x:xs) (y:ys) (r:rs) (w:ws)=genWall x y r w:genWalls xs ys rs ws
+genWalls [] _ _ _ =[]
+genWalls _ [] _ _ =[]
+genWalls _ _ [] _ =[]
+genWalls _ _ _ [] =[]
+
+genFirstWalls::Int->StdGen->Walls
+genFirstWalls y ran =rmdups (genWalls (replist 5 [(cols `div` width)+(i*2*width)| i<-taken n 1 2 ran4]) (concat [replicate n (y-j)|j<-genList m (-5)]) (replicate 15 (-5)) (replicate 15 width))
+         where (width,ran2)=randomR (4,7) ran
+               (n,ran3)=randomR (3,5) ran2
+               (m,ran4)=randomR (3,5) ran3
+
+genList::Int->Int->[Int]
+genList n x=if n==1 then [x+5] else (x+5):genList (n-1) (x+5) 
+
+moveWalls:: GameState-> (Walls,StdGen,StdGen,Bool)
+moveWalls (GameState _ walls _ _ _ ran _ _ _ _ _)= (newWalls,ran',ran'',newPoint)
+        where
+                (_,wallY)=head (head walls)
+                wallXs=getHeads walls
+                (wallY',rm,newPoint)
+                        |wallY==rows = (1,7,True)
+                        |otherwise =(wallY,1,False)
+                wallYs=getWallYs walls (wallY-wallY')
+                newWalls
+                        |wallY'==1 = genFirstWalls 3 ran''
+                        |otherwise =genWalls wallXs wallYs rns widths
+                (_,ran')=randomR (-1*rm, 1*rm) ran
+                (_,ran'')=randomR (-1*rm, 1*rm) ran'
+                rns=getRandoms ran walls rm
+                widths=getWidths ran walls wallY
+
+checkGameOver :: GameState -> Bool
+checkGameOver (GameState car wall point dir over ran ran2 lifes record super supercount) =   minx == 1 || maxx == cols-1 ||
+                      headY == (rows-19)||headY==3||
+                      (wasWallsHit (GameState car wall point dir over ran ran2 lifes record super supercount) && lifes<1)||lifes==0
+        where   (_, headY) = head car
+                minx=minimum (getHeads' car)
+                maxx=maximum (getHeads' car)
+
+changeDirection :: GameState -> Direction -> GameState
+changeDirection (GameState c w p _ g r r2 l re su suc) newDir = GameState c w p newDir g r r2 l re su suc
+
+makeSuper::GameState->Bool->GameState
+makeSuper (GameState a b c d e f g i j _ k) bool=GameState a b c d e f g i j bool k
+
+newCell::Car->StdGen->Car
+newCell car ran=newcar
+        where
+              (_,carY)=head car
+              minx=minimum (getHeads' car)-1
+              maxx=maximum (getHeads' car)+1
+              newcar=if maxx-minx<cols `div` 2 then (if getRandom ran<3 then car++[(minx,carY-2)] else car++[(maxx,carY-2)]) else car
+
+initialGameState :: Bool->Int -> GameState
+initialGameState gameOver record=GameState { getCar = [ (carX, carY),
+                                                        (carX, carY - 1),
+                                                        (carX, carY - 2),
+                                                        (carX - 1, carY - 2),
+                                                        (carX + 1, carY - 2)]
+                                        , getWalls =genFirstWalls 3 (mkStdGen 10)
+                                        , getPoints =0
+                                        , getDirection = UP
+                                        , isGameOver = gameOver
+                                        , getRandomStdGen = mkStdGen 100
+                                        , getRandomStdGen2 = mkStdGen 200
+                                        , getLifes=9
+                                        , getRecord=record
+                                        , isSuper=False
+                                        , getSuperCount=5}
+        where   carX = cols `div` 2
+                carY = rows-21
+
+taken::Int->Int->Int->StdGen->[Int]
+taken n lo hi ran=if n==1 then [res] else res:taken (n-1) lo hi ran2
+        where (res,ran2)=randomR (lo,hi) ran
+
+getWallYs::Walls->Int->[Int]
+getWallYs walls diff =Prelude.map (\((_,y):_)->y-diff+1) walls
+
+getRandoms::StdGen->Walls->Int->[Int]
+getRandoms ran (_:ws) rm=rn:getRandoms ran2 ws rm
+        where (rn,ran2)=randomR (-1*rm, 1*rm) ran
+getRandoms _ [] _=[]
+
+getWidths::StdGen->Walls->Int->[Int]
+getWidths ran (w:ws) y=width:getWidths ran2 ws y
+        where (width,ran2)
+                        |y<2=randomR (1,cols `div` 2) ran
+                        |otherwise=(length w-1, ran)
+getWidths _ [] _=[]
+
+getHeads::Walls->[Int]
+getHeads= Prelude.map (\((a,_):_)->a)
+
+getHeads'::Car->[Int]
+getHeads'= Prelude.map fst
+
+move':: (Int,Int)->Car->Car
+move' (a,b)= Prelude.map (\(c,d)->(a+c,b+d))
+
+getRandom::StdGen->Int
+getRandom ran=res
+        where (res,_)=randomR (0,4) ran
+
+replist:: Int-> [Int]->[Int]
+replist n x= if n==1 then x else x ++ replist (n-1) x
+
+rmdups :: Eq a=>[a] -> [a]
+rmdups [] = []
+rmdups (x:xs) = x : Prelude.filter (/= x) (rmdups xs)
