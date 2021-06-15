@@ -2,11 +2,12 @@
 
 Gra w ramach projektu realizowanego na przedmiocie Programowanie Funkcyjne, MINI PW
 
-##Sterowanie
+## Sterowanie
 - nadawnie kierunku odbywa się poprzez naciśnięcie odpowiednich klawiszy strzałek
 - uruchomienie Tarczy odbywa się poprzez naciśnięcie klawisza "z"
+- po przegraniu można rozpocząć nową rozgrywkę naciskając Enter
 
-##Zasady gry
+## Zasady gry
 - Gracz posiada 9 żyć
 - Za zderzenie ze ścianą gracz traci jedno życie
 - Podczas zderzenia fragmenty ściany ulegają wypadkowi
