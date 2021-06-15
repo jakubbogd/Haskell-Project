@@ -72,7 +72,7 @@ update :: Float -> GameState -> IO GameState
 update _ (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount) =  do
                         writeFile "record.txt" (show record)
                         if gameOver
-                            then return (GameState car (genFirstWalls 3 stdgen2) points direction gameOver stdgen stdgen2 lifes record super scount)
+                            then return (GameState car (genFirstWalls 2 stdgen2) points direction gameOver stdgen stdgen2 lifes record super scount)
                             else return (GameState newCar newWalls newPoints direction newGameOver newStdGen newStdGen2 newlifes newRecord super newsupercount)
     where   
             GameState newCar' newWalls' _ _ _ _ _ newlifes _ _ newsupercount'= move (GameState car walls points direction gameOver stdgen stdgen2 lifes record super scount)
