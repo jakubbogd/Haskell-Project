@@ -68,6 +68,7 @@ genList::Int->Int->[Int]
 genList n x=if n==1 then [x+5] else (x+5):genList (n-1) (x+5) 
 
 moveWalls:: GameState-> (Walls,StdGen,StdGen,Bool)
+moveWalls (GameState _ [] _ _ _ ran ran' _ _ _ _)=([],ran,ran',False)
 moveWalls (GameState _ walls _ _ _ ran _ _ _ _ _)= (newWalls,ran',ran'',newPoint)
         where
                 (_,wallY)=head (head walls)
@@ -77,7 +78,7 @@ moveWalls (GameState _ walls _ _ _ ran _ _ _ _ _)= (newWalls,ran',ran'',newPoint
                         |otherwise =(wallY,1,False)
                 wallYs=getWallYs walls (wallY-wallY')
                 newWalls
-                        |wallY'==1 = genFirstWalls 3 ran''
+                        |wallY'==1 = genFirstWalls 2 ran''
                         |otherwise =genWalls wallXs wallYs rns widths
                 (_,ran')=randomR (-1*rm, 1*rm) ran
                 (_,ran'')=randomR (-1*rm, 1*rm) ran'
@@ -112,7 +113,7 @@ initialGameState gameOver record=GameState { getCar = [ (carX, carY),
                                                         (carX, carY - 2),
                                                         (carX - 1, carY - 2),
                                                         (carX + 1, carY - 2)]
-                                        , getWalls =genFirstWalls 3 (mkStdGen 10)
+                                        , getWalls =genFirstWalls 2 (mkStdGen 10)
                                         , getPoints =0
                                         , getDirection = UP
                                         , isGameOver = gameOver
